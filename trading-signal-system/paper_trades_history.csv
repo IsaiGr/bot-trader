@@ -1,0 +1,2 @@
+Trade_ID,Date_Entry,Date_Exit,Symbol,Action,Entry_Price,Exit_Price,Stop_Loss,Take_Profit,Status,PnL_Pct
+ed1fb9f5,2026-08-09 00:03:41,2026-08-09 00:00:00,ETHUSDT,BUY,3500.0000,3425.1000,3425.1000,3650.1500,CLOSED_LOSS,-2.14
