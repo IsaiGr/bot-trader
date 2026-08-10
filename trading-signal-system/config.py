@@ -31,7 +31,7 @@ class Settings:
     # --- Exchange WebSocket ---
     EXCHANGE_WS_URL: str = "wss://stream.binance.com:9443/ws"
     TRADING_PAIRS: list[str] = field(default_factory=lambda: ["ETHUSDT"])
-    TIMEFRAMES: list[str] = field(default_factory=lambda: ["1h", "4h"])
+    TIMEFRAMES: list[str] = field(default_factory=lambda: ["15m"])
     CANDLE_BUFFER_SIZE: int = 200
     SCANNER_COOLDOWN: int = 300  # Segundos entre alertas del mismo par
 
@@ -69,7 +69,7 @@ def load_settings() -> Settings:
     ]
     timeframes = [
         tf.strip()
-        for tf in os.getenv("TIMEFRAMES", "1h,4h").split(",")
+        for tf in os.getenv("TIMEFRAMES", "15m").split(",")
         if tf.strip()
     ]
 

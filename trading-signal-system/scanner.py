@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class Scanner:
     """
     Escáner que procesa velas cerradas usando Pandas y decide si activar la tubería de análisis de IA.
-    Implementa el filtro macro del Golden Pocket (0.50 - 0.618 de Fibonacci).
+    Implementa el filtro macro del Golden Pocket y cruces de MACD/RSI.
     """
     def __init__(self, candle_buffer: CandleBuffer, cooldown_seconds: int = 300):
         self.candle_buffer = candle_buffer
@@ -23,10 +23,8 @@ class Scanner:
     async def on_candle_closed(self, symbol: str, timeframe: str, candle: dict) -> Optional[TradingAlert]:
         """
         Procesa una vela recién cerrada, calcula los indicadores usando Pandas y 
-        evalúa si el precio está interactuando con el Golden Pocket de Fibonacci.
+        evalúa si el precio está en una situación interesante.
         """
-        logger.info(f"🔍 Escaneando vela cerrada para {symbol} en {timeframe}")
-        
         # Añadir la vela al búfer
         self.candle_buffer.add(symbol, timeframe, candle)
         
@@ -34,12 +32,10 @@ class Scanner:
         current_time = time.time()
         last_time = self._last_alert_time.get(symbol, 0)
         if current_time - last_time < self.cooldown_seconds:
-            logger.info(f"⏳ Saltando {symbol} debido al tiempo de enfriamiento.")
             return None
             
         # Comprobar si hay suficientes velas (mínimo 200 para EMA 200 y macro Fib)
         if self.candle_buffer.size(symbol, timeframe) < 200:
-            logger.debug(f"Datos insuficientes para {symbol} en {timeframe}.")
             return None
             
         # Obtener los datos como DataFrame de Pandas
@@ -82,37 +78,42 @@ class Scanner:
         latest = df.iloc[-1]
         prev = df.iloc[-2]
         
-        # Estado del MACD
+        # 1. Trigger de MACD
         macd_state = "neutral"
         if prev['macd'] <= prev['macd_signal'] and latest['macd'] > latest['macd_signal']:
             macd_state = "bullish_crossover"
         elif prev['macd'] >= prev['macd_signal'] and latest['macd'] < latest['macd_signal']:
             macd_state = "bearish_crossover"
             
-        # ── 3. Filtro Fibonacci (Golden Pocket) ──
-        # Basado en el rango macro (últimas 200 velas)
+        # 2. Trigger de Fibonacci
         macro_high = df['high'].max()
         macro_low = df['low'].min()
         diff = macro_high - macro_low
-        
-        # El Golden Pocket suele definirse entre el 0.50 y el 0.618 del retroceso
         pocket_bottom = macro_low + (diff * 0.50)
         pocket_top = macro_low + (diff * 0.618)
         
-        # Verificamos si la vela actual (sus mechas o cuerpo) tocó esta zona
         curr_high = latest['high']
         curr_low = latest['low']
+        in_golden_pocket = (curr_low <= pocket_top) and (curr_high >= pocket_bottom)
         
-        in_golden_pocket = False
-        if (curr_low <= pocket_top) and (curr_high >= pocket_bottom):
-            in_golden_pocket = True
+        # --- FILTRO MATEMÁTICO INTELIGENTE ---
+        trigger_reasons = []
+        if macd_state != "neutral":
+            trigger_reasons.append(f"Cruce MACD ({macd_state})")
+        if latest['rsi_14'] < 30:
+            trigger_reasons.append("RSI Sobrevendido (<30)")
+        elif latest['rsi_14'] > 70:
+            trigger_reasons.append("RSI Sobrecomprado (>70)")
+        if in_golden_pocket:
+            trigger_reasons.append("Precio en Golden Pocket (Fibonacci)")
             
-        # ¡FILTRO ESTRICTO! Si no está en el Golden Pocket, no hay alerta
-        if not in_golden_pocket:
-            logger.debug(f"📉 Precio de {symbol} fuera del Golden Pocket ({pocket_bottom:.2f} - {pocket_top:.2f}). Ignorando.")
+        # Si el mercado está muerto (sin triggers), no hacemos nada
+        if not trigger_reasons:
+            logger.debug(f"📉 {symbol}: Mercado sin estructura interesante. Ignorando.")
             return None
             
-        # ── 4. Construcción del Payload para la IA ──
+        # Si hay acción, armamos los datos para la IA
+        reasons_str = ", ".join(trigger_reasons)
         
         indicators = Indicators(
             rsi_14=float(latest['rsi_14']) if pd.notna(latest['rsi_14']) else 50.0,
@@ -123,7 +124,7 @@ class Scanner:
             atr_14=float(latest['atr_14']) if pd.notna(latest['atr_14']) else 0.0,
             fib_0_50=float(pocket_bottom),
             fib_0_618=float(pocket_top),
-            in_golden_pocket=in_golden_pocket
+            in_golden_pocket=bool(in_golden_pocket)
         )
         
         alert = TradingAlert(
@@ -132,13 +133,13 @@ class Scanner:
             current_price=float(latest['close']),
             indicators=indicators,
             market_context=(
-                f"El precio actual ha entrado en la zona macro de Golden Pocket de Fibonacci "
-                f"(entre {pocket_bottom:.2f} y {pocket_top:.2f}). "
-                f"La IA debe evaluar si esto representa un rebote o una ruptura."
+                f"El escáner matemático detectó las siguientes condiciones: {reasons_str}. "
+                f"Analiza si esto representa una oportunidad real de ganancia (pequeña o grande) "
+                f"y filtra cualquier señal falsa. Si es seguro, envía la señal."
             )
         )
         
         self._last_alert_time[symbol] = current_time
-        logger.info(f"🎯 ¡Alerta generada! {symbol} ha entrado al Golden Pocket.")
+        logger.info(f"🎯 Condiciones cumplidas ({reasons_str}). Enviando a la IA...")
         
         return alert

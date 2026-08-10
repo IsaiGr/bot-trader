@@ -7,4 +7,4 @@ openai>=1.40.0
 python-dotenv>=1.0.0
 websockets>=13.0
 pandas>=2.2.0
-pandas-ta>=0.3.14
+
