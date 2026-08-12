@@ -157,7 +157,7 @@ async def analyze_and_dispatch(alert: TradingAlert) -> dict:
 
     if not verdict.approved:
         logger.info("🚫 Señal filtrada: %s", verdict.summary)
-        return {"status": "filtered_out", "reason": verdict.summary}
+        return {"status": "filtered_out", "reason": verdict.summary, "decision": decision}
 
     # ── 5. Registrar en Paper Trader ──
     trade = paper_trader.open_trade(alert, decision)
@@ -173,7 +173,7 @@ async def analyze_and_dispatch(alert: TradingAlert) -> dict:
         return {"status": "error", "detail": "Error al enviar a Telegram"}
 
     logger.info("✅ Señal despachada: %s %s", decision.action.value, alert.ticker)
-    return {"status": "signal_dispatched", "action": decision.action.value}
+    return {"status": "signal_dispatched", "action": decision.action.value, "decision": decision}
 
 
 # ──────────────────────────────────────────────
@@ -185,29 +185,32 @@ async def on_scanner_candle_closed(symbol: str, timeframe: str, candle: dict) ->
     Callback invocado cuando se cierra una vela.
     Actualiza PaperTrader y evalúa Scanner.
     """
-    # 1. Actualizar operaciones simuladas activas
-    closed_trades = paper_trader.update_with_candle(symbol, candle)
-    for trade in closed_trades:
-        emoji = "✅" if trade.status == "CLOSED_WIN" else "❌"
-        msg = (
-            f"{emoji} <b>PAPER TRADE CERRADO</b>\n\n"
-            f"🆔 <code>{trade.trade_id}</code>\n"
-            f"📌 Par: <code>{trade.symbol}</code>\n"
-            f"📊 Resultado: <b>{trade.status}</b>\n"
-            f"💰 PnL: <b>{trade.pnl_pct:+.2f}%</b>"
-        )
-        await send_telegram_message(msg, settings)
+    try:
+        # 1. Actualizar operaciones simuladas activas
+        closed_trades = paper_trader.update_with_candle(symbol, candle)
+        for trade in closed_trades:
+            emoji = "✅" if trade.status == "CLOSED_WIN" else "❌"
+            msg = (
+                f"{emoji} <b>PAPER TRADE CERRADO</b>\n\n"
+                f"🆔 <code>{trade.trade_id}</code>\n"
+                f"📌 Par: <code>{trade.symbol}</code>\n"
+                f"📊 Resultado: <b>{trade.status}</b>\n"
+                f"💰 PnL: <b>{trade.pnl_pct:+.2f}%</b>"
+            )
+            await send_telegram_message(msg, settings)
 
-    # 2. Generar nuevas alertas
-    alert = await scanner.on_candle_closed(symbol, timeframe, candle)
+        # 2. Generar nuevas alertas
+        alert = await scanner.on_candle_closed(symbol, timeframe, candle)
 
-    if alert is not None:
-        alert.source = "scanner"
-        result = await analyze_and_dispatch(alert)
-        logger.info(
-            "📊 Resultado scanner %s %s: %s",
-            symbol, timeframe, result.get("status", "unknown"),
-        )
+        if alert is not None:
+            alert.source = "scanner"
+            result = await analyze_and_dispatch(alert)
+            logger.info(
+                "📊 Resultado scanner %s %s: %s",
+                symbol, timeframe, result.get("status", "unknown"),
+            )
+    except Exception as e:
+        logger.error(f"❌ Error en callback de vela cerrada para {symbol} {timeframe}: {e}", exc_info=True)
 
 
 # ──────────────────────────────────────────────
@@ -281,7 +284,8 @@ async def lifespan(app: FastAPI):
     # Inicializar y lanzar Telegram Listener (Kill-Switch)
     telegram_listener = TelegramListener(
         token=settings.TELEGRAM_BOT_TOKEN,
-        on_command=handle_telegram_command
+        on_command=handle_telegram_command,
+        authorized_chat_id=settings.TELEGRAM_CHAT_ID
     )
     _tl_task = asyncio.create_task(telegram_listener.start())
 
@@ -390,25 +394,29 @@ async def receive_webhook(alert: TradingAlert):
         raise HTTPException(status_code=502, detail=result.get("detail", "Error interno"))
 
     if result["status"] == "filtered_out":
-        # Para construir la respuesta, necesitamos re-ejecutar parcialmente
-        # En producción esto se refactorizaría, pero mantenemos retrocompatibilidad
-        return FilteredOutResponse(
-            reason=result.get("reason", "Filtrada"),
-            decision=AIDecision(
+        decision = result.get("decision")
+        if decision is None:
+            decision = AIDecision(
                 action="NO_ACTION",
                 confidence_score=0,
                 recommended_stop_loss_pct=1.0,
                 recommended_take_profit_pct=2.0,
                 rationale=result.get("reason", "Señal filtrada por reglas de riesgo"),
-            ),
+            )
+        return FilteredOutResponse(
+            reason=result.get("reason", "Filtrada"),
+            decision=decision,
         )
 
-    return SignalDispatchedResponse(
-        decision=AIDecision(
+    decision = result.get("decision")
+    if decision is None:
+        decision = AIDecision(
             action=result.get("action", "NO_ACTION"),
             confidence_score=75,
             recommended_stop_loss_pct=1.0,
             recommended_take_profit_pct=2.0,
             rationale="Señal despachada exitosamente",
-        ),
+        )
+    return SignalDispatchedResponse(
+        decision=decision,
     )

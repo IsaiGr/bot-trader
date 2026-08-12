@@ -51,6 +51,27 @@ class PaperTrader:
                     "Status", "PnL_Pct"
                 ])
 
+    def _save_open_trade(self, trade: PaperTrade):
+        """Registra un trade abierto en el archivo histórico para persistencia."""
+        try:
+            with open(self.history_file, mode="a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    trade.trade_id,
+                    trade.entry_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "",  # exit_time
+                    trade.symbol,
+                    trade.action,
+                    f"{trade.entry_price:.4f}",
+                    "",  # exit_price
+                    f"{trade.stop_loss:.4f}",
+                    f"{trade.take_profit:.4f}",
+                    "OPEN",
+                    "0.00"
+                ])
+        except Exception as e:
+            logger.error(f"❌ Error al guardar trade abierto en CSV: {e}")
+
     def open_trade(self, alert: TradingAlert, decision: AIDecision) -> PaperTrade:
         """Abre una nueva posición virtual y la guarda en memoria."""
         trade_id = str(uuid.uuid4())[:8]
@@ -75,6 +96,7 @@ class PaperTrader:
         )
         self.active_trades[trade_id] = trade
         logger.info(f"📝 Paper Trade Abierto [{trade_id}]: {trade.action} {trade.symbol} @ {trade.entry_price:.2f} (SL: {trade.stop_loss:.2f}, TP: {trade.take_profit:.2f})")
+        self._save_open_trade(trade)
         return trade
 
     def update_with_candle(self, symbol: str, candle: dict) -> List[PaperTrade]:

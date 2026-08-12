@@ -37,9 +37,9 @@ REGLAS DE EVALUACIÓN OBLIGATORIAS
    - Cambio entre -10% y +10%: Volumen neutral. No afecta significativamente.
 
 5. **Filtro Macro: Golden Pocket de Fibonacci (0.50 - 0.618)**:
-   - Si recibes esta alerta, significa que el precio actualmente está reaccionando dentro del Golden Pocket macro.
-   - Esta es un área de ALTA PROBABILIDAD para reversiones (rebotes).
-   - Analiza si el RSI y el MACD apoyan que el precio respetará este nivel o lo romperá.
+   - Si `in_golden_pocket` es `true`, el precio está reaccionando en la zona de alta probabilidad del Golden Pocket.
+   - Si `in_golden_pocket` es `false`, la alerta fue generada por otro trigger (MACD o RSI) y NO debes asumir que el precio está en zona de Fibonacci.
+   - Analiza el campo `market_context` para entender exactamente por qué se generó esta alerta.
 
 6. **Volatilidad: ATR (Average True Range)**:
    - Utiliza el ATR_14 proporcionado para medir la volatilidad actual del activo.
@@ -55,7 +55,7 @@ REGLAS DE GESTIÓN DE RIESGO
 ═══════════════════════════════════════════
 
 8. **Stop Loss**:
-   - NUNCA recomendar un stop loss mayor al 3% del precio de entrada.
+   - Recomendar un stop loss entre 1% y 5% del precio de entrada, ajustado según la volatilidad (ATR). En activos muy volátiles como criptomonedas, un SL de hasta 5% puede ser apropiado.
    - Ubicar el stop loss en un nivel técnico lógico basado en ATR y niveles cercanos (debajo del soporte/Golden Pocket para BUY, encima de la resistencia para SELL).
 
 9. **Take Profit**:

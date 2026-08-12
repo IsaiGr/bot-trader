@@ -10,9 +10,10 @@ class TelegramListener:
     Escucha mensajes entrantes de Telegram usando Long Polling.
     Utilizado para implementar el Kill-Switch (/stop y /start).
     """
-    def __init__(self, token: str, on_command: Callable[[str, int], Awaitable[None]]):
+    def __init__(self, token: str, on_command: Callable[[str, int], Awaitable[None]], authorized_chat_id: str):
         self.token = token
         self.on_command = on_command
+        self.authorized_chat_id = authorized_chat_id
         self.base_url = f"https://api.telegram.org/bot{token}"
         self.is_running = False
         self.offset = 0
@@ -50,6 +51,9 @@ class TelegramListener:
                         chat_id = message["chat"]["id"]
                         
                         if text in ["/stop", "/start"]:
+                            if str(chat_id) != self.authorized_chat_id:
+                                logger.warning(f"⚠️ Comando /{text} ignorado de chat no autorizado: {chat_id}")
+                                continue
                             await self.on_command(text, chat_id)
                             
                 except httpx.ReadTimeout:

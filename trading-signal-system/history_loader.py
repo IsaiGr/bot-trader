@@ -1,3 +1,4 @@
+import asyncio
 import httpx
 import logging
 from typing import List, Dict, Any
@@ -17,9 +18,20 @@ async def fetch_historical_candles(symbol: str, timeframe: str, limit: int = 200
     }
     
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, params=params, timeout=15.0)
-        response.raise_for_status()
-        data = response.json()
+        for attempt in range(3):
+            try:
+                response = await client.get(url, params=params, timeout=15.0)
+                response.raise_for_status()
+                data = response.json()
+                break
+            except (httpx.HTTPStatusError, Exception) as e:
+                if attempt < 2:
+                    delay = 2 ** (attempt + 1)
+                    logger.warning(f"⚠️ Error al descargar historial (intento {attempt+1}/3): {e}. Reintentando en {delay}s...")
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error(f"❌ Error final al descargar historial: {e}")
+                    return []
         
     candles = []
     for k in data:

@@ -37,7 +37,12 @@ class CandleBuffer:
             self._buffers[key] = deque(maxlen=self.max_size)
             logger.info(f"Nuevo símbolo/marco temporal detectado: {symbol} - {timeframe}")
         
-        self._buffers[key].append(candle_dict)
+        buffer = self._buffers[key]
+        # Deduplicación: si la última vela tiene el mismo timestamp, reemplazarla
+        if buffer and buffer[-1].get('timestamp') == candle_dict.get('timestamp'):
+            buffer[-1] = candle_dict
+        else:
+            buffer.append(candle_dict)
 
     def get_candles(self, symbol: str, timeframe: str) -> List[Dict[str, Any]]:
         """

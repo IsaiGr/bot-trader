@@ -45,10 +45,15 @@ def evaluate_risk(
     # Quitamos el control a la IA y forzamos la matemática exacta.
     atr = alert.indicators.atr_14
     price = alert.current_price
+    
+    # Calcular límite dinámico de SL basado en ATR
+    dynamic_max_sl = settings.MAX_STOP_LOSS_PCT  # Default
     if atr > 0 and price > 0:
         sl_distance = atr * 1.5 # 1.5x ATR
         sl_pct = (sl_distance / price) * 100
         tp_pct = sl_pct * 2.0 # Ratio R:R de 2.0 fijo
+        
+        dynamic_max_sl = min(max(settings.MAX_STOP_LOSS_PCT, sl_pct * 1.2), 10.0)
         
         logger.info(f"📐 Recalculando SL/TP: IA sugería SL={decision.recommended_stop_loss_pct:.2f}% TP={decision.recommended_take_profit_pct:.2f}% | Python impone SL={sl_pct:.2f}% TP={tp_pct:.2f}% (basado en ATR)")
         
@@ -63,9 +68,9 @@ def evaluate_risk(
         )
 
     # ── Regla 2: Stop loss máximo ──
-    if decision.recommended_stop_loss_pct > settings.MAX_STOP_LOSS_PCT:
+    if decision.recommended_stop_loss_pct > dynamic_max_sl:
         reasons.append(
-            f"Stop loss {decision.recommended_stop_loss_pct}% > máximo {settings.MAX_STOP_LOSS_PCT}%"
+            f"Stop loss {decision.recommended_stop_loss_pct}% > máximo {dynamic_max_sl}%"
         )
 
     # ── Regla 3: Ratio riesgo/recompensa mínimo ──
@@ -101,13 +106,17 @@ def evaluate_risk(
         reasons.append("SELL rechazado: MACD indica bullish_crossover")
 
     # ── Regla 6: Precio vs EMA 200 contradice la dirección ──
+    # Excepción: Si el precio está en el Golden Pocket, permitir compras en retroceso
     price = alert.current_price
     ema_200 = alert.indicators.ema_200
 
     if decision.action == TradeAction.BUY and price < ema_200 * 0.99:
-        reasons.append(
-            f"BUY rechazado: Precio {price} está >1% debajo de EMA 200 ({ema_200})"
-        )
+        if alert.indicators.in_golden_pocket:
+            logger.info("🟡 Excepción Golden Pocket: Permitiendo BUY debajo de EMA 200")
+        else:
+            reasons.append(
+                f"BUY rechazado: Precio {price} está >1% debajo de EMA 200 ({ema_200})"
+            )
 
     if decision.action == TradeAction.SELL and price > ema_200 * 1.01:
         reasons.append(

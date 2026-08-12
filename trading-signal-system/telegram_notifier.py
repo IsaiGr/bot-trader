@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from html import escape as html_escape
 
 import httpx
 
@@ -38,7 +39,7 @@ def format_signal_message(alert: TradingAlert, decision: AIDecision) -> str:
         f"  • EMA 20: <code>{alert.indicators.ema_20:,.2f}</code>\n"
         f"  • EMA 200: <code>{alert.indicators.ema_200:,.2f}</code>\n"
         f"  • Vol 24h: <code>{alert.indicators.volume_24h_change_pct:+.1f}%</code>\n\n"
-        f"📝 <b>Análisis:</b>\n{decision.rationale}"
+        f"📝 <b>Análisis:</b>\n{html_escape(decision.rationale)}"
     )
 
 

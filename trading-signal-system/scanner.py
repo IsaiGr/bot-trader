@@ -115,13 +115,20 @@ class Scanner:
         # Si hay acción, armamos los datos para la IA
         reasons_str = ", ".join(trigger_reasons)
         
+        # Verificar que los indicadores son válidos (no NaN)
+        rsi_val = float(latest['rsi_14']) if pd.notna(latest['rsi_14']) else 50.0
+        ema20_val = float(latest['ema_20']) if pd.notna(latest['ema_20']) else float(latest['close'])
+        ema200_val = float(latest['ema_200']) if pd.notna(latest['ema_200']) else float(latest['close'])
+        atr_val = float(latest['atr_14']) if pd.notna(latest['atr_14']) else 0.0
+        vol_change_val = float(latest['volume_change']) if pd.notna(latest['volume_change']) else 0.0
+        
         indicators = Indicators(
-            rsi_14=float(latest['rsi_14']) if pd.notna(latest['rsi_14']) else 50.0,
+            rsi_14=rsi_val,
             macd=macd_state,
-            ema_20=float(latest['ema_20']),
-            ema_200=float(latest['ema_200']),
-            volume_24h_change_pct=float(latest['volume_change']) if pd.notna(latest['volume_change']) else 0.0,
-            atr_14=float(latest['atr_14']) if pd.notna(latest['atr_14']) else 0.0,
+            ema_20=ema20_val,
+            ema_200=ema200_val,
+            volume_24h_change_pct=vol_change_val,
+            atr_14=atr_val,
             fib_0_50=float(pocket_bottom),
             fib_0_618=float(pocket_top),
             in_golden_pocket=bool(in_golden_pocket)
